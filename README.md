@@ -1,19 +1,24 @@
-## MLX90640 Thermal Image Sensor for RPi4
+# Creepfield Eyez
 
-### Developer : GH
-### E-Mail : lsirikh@naver.com
-### Release : 2024-09-24
+## Setup
+After `git clone`, do these steps to get ready to run the code.
 
-<hr>
+```bash
+python3 -m venv ./venv
+source venv/bin/activate
+pip3 install -r requirements.txt 
+```
 
-#### Using MLX90640 with RPI4 via I2C for Visualization 
+## Run
+After clean reboot of Raspberry Pi, do these steps to run the eyez.
 
-You can acquire data from MLX90640 through I2C on RPI4.  
+```
+sudo killall pigpiod
 
-1. python based project with seeed_mlx9064x lib.
-2. Visualization using OpenCV with colored mapping.  
+sudo pigpiod
 
-Sample image is located at `/pics/example.png`.
+source venv/bin/activate
 
-![Sample Image](./pics/example1.jpg)
-![Sample Image](./pics/example2.jpg)
+nohup python3 -u scanner4.py >> scanner4.log 2>&1 &
+tail -f scanner4.log
+```
