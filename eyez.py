@@ -9,10 +9,13 @@ import signal
 import sys
 import pigpio
 import threading
+from datetime import datetime 
 
 def signal_handler(sig, frame):
-    cleanup()
-    sys.exit(0)
+    global shutdown_flag
+    print("\nShutdown requested...")
+    shutdown_flag = True  # Signal the main loop to exit
+    # Don't call cleanup here - let main loop handle it
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -39,13 +42,12 @@ signal.signal(signal.SIGINT, signal_handler)
 # changes that signify the presence of a person.
 threshold = 25
 
-
 # output images and stich together a video for debugging
-make_video = False
+make_video = True
 
 pwm = None
+shutdown_flag = False
 
-# RIGHT EYE
 # GPIO pin for PWM with 50Hz
 right_servo = 10
 left_servo = 9
@@ -76,9 +78,18 @@ def cleanup():
         pwm.set_PWM_frequency(right_servo, 0)
         pwm.set_PWM_dutycycle(left_servo, 0)
         pwm.set_PWM_frequency(left_servo, 0)
+        
+        # Stop the pigpio daemon connection
+        pwm.stop()
+        print("Pigpio stopped")
+    
     if make_video:
-        create_video('frames', 'output_video.avi')
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        output_filename = f'output_video_{timestamp}.mp4'
+        create_video('frames', output_filename)
+    
     clear_frames_directory()
+    print("Cleanup complete")
 
 def move_servos(pwm, target_column):
     pulse_width_left = translate_to_quadrant(target_column, left_servo)
@@ -96,7 +107,8 @@ def move_servos(pwm, target_column):
 
 
 def main():
-    
+    global pwm 
+
     # START SERVO SETUP ##################
     # more info at http://abyz.me.uk/rpi/pigpio/python.html#set_servo_pulsewidth
     pwm = pigpio.pi()
@@ -122,7 +134,7 @@ def main():
     current_column = 16
     target_column = 16
 
-    while True:
+    while not shutdown_flag:
         try:
             start_time = time.time()
             try:
@@ -155,14 +167,21 @@ def main():
             move_servos(pwm, target_column)
             current_column = target_column
 
-            # Save normalized frame
             if make_video:
-                save_image(normalized_data, f'frames/normalized_{frame_count}.png')
+                save_image_with_overlay(
+                    normalized_data,
+                    f'frames/normalized_{frame_count:04d}.png',
+                    target_column, 
+                    current_column
+                )
                 frame_count += 1
 
             # output_fps(start_time)
         except KeyboardInterrupt:
-            break
+            break  # Exit loop on keyboard interrupt
+    
+    # Clean shutdown after loop exits
+    cleanup()
 
 
 def update_background_model(frame, background_model, alpha=0.05):
@@ -210,22 +229,61 @@ def clear_frames_directory(directory='frames/'):
             print(f'Failed to delete {file_path}. Reason: {e}')
 
 
-def save_image(data, filename):
-    cv2.imwrite(filename, data)
-
+def save_image_with_overlay(data, filename, target_column=None, current_column=None):
+    """Save thermal image with tracking overlay, upscaled for visibility"""
+    
+    # Apply color map for better visualization
+    colored = cv2.applyColorMap(data, cv2.COLORMAP_JET)
+    
+    # Upscale 32x24 to 640x480 (20x larger) using nearest neighbor to keep it pixelated
+    scale_factor = 20
+    upscaled = cv2.resize(colored, (32 * scale_factor, 24 * scale_factor), 
+                         interpolation=cv2.INTER_NEAREST)
+    
+    # Draw target column indicator (green line)
+    if target_column is not None:
+        x_pos = int((target_column + 0.5) * scale_factor)
+        cv2.line(upscaled, (x_pos, 0), (x_pos, 24 * scale_factor), 
+                (0, 255, 0), 3)  # Green line, 3px thick
+        
+        # Add text label at top
+        cv2.putText(upscaled, f'Target: {target_column}', 
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 
+                   0.7, (0, 255, 0), 2)
+    
+    # Draw current column indicator (blue line) if different
+    if current_column is not None and current_column != target_column:
+        x_pos = int((current_column + 0.5) * scale_factor)
+        cv2.line(upscaled, (x_pos, 0), (x_pos, 24 * scale_factor), 
+                (255, 0, 0), 2)  # Blue line, 2px thick
+        
+        cv2.putText(upscaled, f'Current: {current_column}', 
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 
+                   0.7, (255, 0, 0), 2)
+    
+    cv2.imwrite(filename, upscaled)
 
 def create_video(image_folder, output_video, fps=10):
-    images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
-    frame = cv2.imread(os.path.join(image_folder, images[0]))
-    height, width, layers = frame.shape
+    images = sorted([img for img in os.listdir(image_folder) if img.endswith(".png")])
+    
+    if not images:
+        print("No images found to create video")
+        return
+    
+    first_frame = cv2.imread(os.path.join(image_folder, images[0]))
+    height, width, layers = first_frame.shape
 
-    video = cv2.VideoWriter(output_video, cv2.VideoWriter_fourcc(*'DIVX'), fps, (width, height))
+    # Use better codec - mp4v for .mp4 or XVID for .avi
+    video = cv2.VideoWriter(output_video, 
+                           cv2.VideoWriter_fourcc(*'mp4v'), 
+                           fps, (width, height))
 
     for image in images:
-        video.write(cv2.imread(os.path.join(image_folder, image)))
+        frame = cv2.imread(os.path.join(image_folder, image))
+        video.write(frame)
 
-    cv2.destroyAllWindows()
     video.release()
+    print(f"Video saved to {output_video}")
 
 
 ## ENTRYPOINT ####################################
