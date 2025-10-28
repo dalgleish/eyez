@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /home/creepfield/eyez
+cd /home/eyez
 sudo killall pigpiod
 sudo pigpiod
 source venv/bin/activate

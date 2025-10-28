@@ -41,14 +41,14 @@ threshold = 25
 
 
 # output images and stich together a video for debugging
-make_video = True
+make_video = False
 
 pwm = None
 
 # RIGHT EYE
 # GPIO pin for PWM with 50Hz
-right_servo = 18
-left_servo = 12
+right_servo = 10
+left_servo = 9
 
 quadrants = {
     # Right Eye Range
@@ -102,12 +102,11 @@ def main():
     pwm = pigpio.pi()
     pwm.set_mode(right_servo, pigpio.OUTPUT)
     pwm.set_PWM_frequency(right_servo, 50)
-
-    # pwm = pigpio.pi()
     pwm.set_mode(left_servo, pigpio.OUTPUT)
     pwm.set_PWM_frequency(left_servo, 50)
     # END SERVO SETUP
 
+    # CAMERA SETUP ##################
     mlx = seeed_mlx9064x.grove_mxl90640()
     frame = [0] * 768  # 32x24
     width, height = 32, 24

@@ -9,7 +9,8 @@ import pigpio
 import time
 
 # Configuration
-SERVO_PIN = 18
+# SERVO_PIN = 10 # right
+SERVO_PIN = 9 # left
 
 def angle_to_pulsewidth(angle):
     """
@@ -93,6 +94,8 @@ def main():
         print("ERROR: Could not connect to pigpio daemon")
         print("Make sure pigpiod is running: sudo pigpiod")
         return
+
+    pi.set_mode(SERVO_PIN, pigpio.OUTPUT) 
     
     try:
         # Run automated tests
